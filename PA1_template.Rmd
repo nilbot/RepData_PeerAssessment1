@@ -1,25 +1,122 @@
 ---
 title: "Reproducible Research: Peer Assessment 1"
-output: 
+output:
   html_document:
     keep_md: true
 ---
+# Introduction
+
+This is the peer assignment 1 of the course RepData. The opts used in this R-Markdown is:
+
+```{r opts,results='hide',message=FALSE}
+library(knitr)
+opts_chunk$set(echo=TRUE)
+```
 
 
 ## Loading and preprocessing the data
 
+Loading data using `read.csv`
 
+```{r loading,cache=TRUE}
+if(!exists("activity.csv"))unzip("activity.zip")
+data <- read.csv("activity.csv",head=T,na.strings="NA")
+```
 
 ## What is mean total number of steps taken per day?
 
+Making a histogram of the total number of steps taken each day, ignoring NA values
+
+```{r totalstepshist}
+library(ggplot2)
+data.totalsteps<-tapply(data$steps,data$date,FUN=sum,na.rm=T)
+qplot(data.totalsteps,binwidth=500,xlab="total number of steps taken each day")
+```
 
 
+The **mean** and the **median** of total number of steps taken per day
+
+```{r totalstepsmean}
+mean(data.totalsteps,na.rm = T)
+```
+
+```{r totalstepsmedian}
+median(data.totalsteps,na.rm = T)
+```
 ## What is the average daily activity pattern?
 
+Time series plot of 5-minute interval and the average number of steps taken, avergaed across all days
 
+```{r avgdaily}
+avg <- aggregate(x=list(steps=data$steps),by=list(interval=data$interval),FUN = mean, na.rm = T)
+
+ggplot(data=avg,aes(x=interval,y=steps)) +
+  geom_line() +
+  xlab("5-minute interval")+
+  ylab("average number of steps taken")
+```
+
+The maximun number of steps on 5-minute interval on average across all the days
+
+```{r avgmax}
+avg[which.max(avg$steps),]
+```
 
 ## Imputing missing values
+```{r nai}
+nai <- is.na(data$steps)
+#sum of missing
+sum(nai)
+```
 
+Replacing strategy is to replace the NA with the mean of the interval for that day
 
+```{r replacingnaswithmean}
+rnwm <- function(steps, interval){
+  result <- NA
+  if(!is.na(steps))
+    result<-c(steps)
+  else
+    result<-(avg[avg$interval==interval,"steps"])
+  result
+}
+data.replaced <- data
+data.replaced$steps <- mapply(rnwm, data.replaced$steps, data.replaced$interval)
+```
+
+Plotting histogram on the newly created dataset, reporting the **mean** and the **median** total number of steps taken each day. 
+
+```{r replacedhist}
+data.replaced.totalsteps <- tapply(data.replaced$steps, data.replaced$date, FUN=sum)
+qplot(data.replaced.totalsteps,binwidth=500,xlab="total number of steps taken each day (missing values are replaced by mean)")
+#mean
+mean(data.replaced.totalsteps)
+#median
+median(data.replaced.totalsteps)
+```
+
+The **mean** and **median** are both greater than previous analysis because we imputed the previous supposed `"0"`s with average total daily steps
 
 ## Are there differences in activity patterns between weekdays and weekends?
+
+On the newly imputed dataset, we introduce 2 factor(group) `"weekday"` and `"weekend"`. And then we plot a time series of the 5-minute interval and average number of steps taken, averaged across all weekdays and weekends.
+
+```{r weekdaydiff}
+weekday <- function(date){
+  day<- weekdays(date)
+  if (day %in% c("Monday","Tuesday","Wednesday","Thursday","Friday"))
+    return ("weekday")
+  else if(day %in% c("Saturday","Sunday"))
+    return("weekend")
+  else stop("invalid date")
+}
+data.replaced$date <- as.Date(data.replaced$date)
+data.replaced$day <- sapply(data.replaced$date,FUN=weekday)
+
+avgwd <- aggregate(steps~interval+day,data = data.replaced, mean)
+ggplot(avgwd,aes(interval,steps))+
+  geom_line() +
+  facet_grid(day~.) +
+  xlab("5-minute interval") +
+  ylab("number of steps")
+```
